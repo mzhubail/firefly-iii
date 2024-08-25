@@ -36,6 +36,14 @@ use Illuminate\Support\Facades\Session;
  */
 class Preferences
 {
+    /**
+     * This is used as a cache to avoid repeated queries, as method `getForUser`
+     * is reached from multiple paths.
+     *
+     * @var array<string, Preference>
+     */
+    private static $retrieved_preferences = [];
+
     public function all(): Collection
     {
         $user = auth()->user();
@@ -71,7 +79,17 @@ class Preferences
     {
         // don't care about user group ID, except for some specific preferences.
         $userGroupId = $this->getUserGroupId($user, $name);
-        $preference  = Preference::where('user_group_id', $userGroupId)->where('user_id', $user->id)->where('name', $name)->first(['id', 'user_id', 'name', 'data', 'updated_at', 'created_at']);
+        $key = $userGroupId . '-' . $user->id . '-' . $name;
+
+        if (!isset(self::$retrieved_preferences[$key])) {
+            self::$retrieved_preferences[$key] =
+                Preference::where('user_group_id', $userGroupId)
+                    ->where('user_id', $user->id)
+                    ->where('name', $name)
+                    ->first(['id', 'user_id', 'name', 'data', 'updated_at', 'created_at']);
+        }
+
+        $preference = self::$retrieved_preferences[$key];
 
         if (null !== $preference && null === $preference->data) {
             $preference->delete();
